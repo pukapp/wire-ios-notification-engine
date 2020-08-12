@@ -86,7 +86,10 @@ extension PushNotificationStrategy: NotificationStreamSyncDelegate {
         }
         eventProcessor.process(updateEvents: parsedEvents, ignoreBuffer: true)
         pushNotificationStatus.didFetch(eventIds: eventIds, lastEventId: latestEventId, finished: hasMoreToFetch)
-        
+        if let lid = latestEventId {
+            self.managedObjectContext.zm_lastNotificationID = lid
+            self.managedObjectContext.saveOrRollback()
+        }
     }
     
     public func failedFetchingEvents() {
