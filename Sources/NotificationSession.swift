@@ -190,6 +190,12 @@ public class NotificationSession {
     private let operationLoop: RequestGeneratingOperationLoop
 
     private let strategyFactory: StrategyFactory
+    
+    public var delegate: UpdateEventsDelegate? {
+        didSet {
+            self.strategyFactory.delegate = delegate
+        }
+    }
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -201,8 +207,7 @@ public class NotificationSession {
     public convenience init(applicationGroupIdentifier: String,
                             accountIdentifier: UUID,
                             environment: BackendEnvironmentProvider,
-                            analytics: AnalyticsType?,
-                            delegate: UpdateEventsDelegate?
+                            analytics: AnalyticsType?
     ) throws {
        
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
@@ -251,7 +256,6 @@ public class NotificationSession {
             cachesDirectory: FileManager.default.cachesURLForAccount(with: accountIdentifier, in: sharedContainerURL),
             accountContainer: StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL),
             analytics: analytics,
-            delegate: delegate,
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier
         )
@@ -281,7 +285,6 @@ public class NotificationSession {
                             cachesDirectory: URL,
                             accountContainer: URL,
                             analytics: AnalyticsType?,
-                            delegate: UpdateEventsDelegate?,
                             sharedContainerURL: URL,
                             accountIdentifier: UUID) throws {
         
@@ -293,7 +296,6 @@ public class NotificationSession {
                                               applicationStatus: applicationStatusDirectory,
                                               pushNotificationStatus: pushNotificationStatus,
                                               notificationsTracker: notificationsTracker,
-                                              updateEventsDelegate: delegate,
                                               sharedContainerURL: sharedContainerURL,
                                               accountIdentifier: accountIdentifier)
         

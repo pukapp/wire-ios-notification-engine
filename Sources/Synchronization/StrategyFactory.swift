@@ -28,7 +28,7 @@ class StrategyFactory {
     let pushNotificationStatus: PushNotificationStatus
     let notificationsTracker: NotificationsTracker?
     private(set) var strategies = [AnyObject]()
-    private(set) var delegate: UpdateEventsDelegate?
+    public var delegate: UpdateEventsDelegate?
     
     private(set) var sharedContainerURL: URL
     private(set) var accountIdentifier: UUID
@@ -39,14 +39,12 @@ class StrategyFactory {
          applicationStatus: ApplicationStatus,
          pushNotificationStatus: PushNotificationStatus,
          notificationsTracker: NotificationsTracker?,
-         updateEventsDelegate: UpdateEventsDelegate?,
          sharedContainerURL: URL,
          accountIdentifier: UUID) {
         self.syncContext = syncContext
         self.applicationStatus = applicationStatus
         self.pushNotificationStatus = pushNotificationStatus
         self.notificationsTracker = notificationsTracker
-        self.delegate = updateEventsDelegate
         
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
@@ -79,7 +77,7 @@ class StrategyFactory {
                                         applicationStatus: applicationStatus,
                                         pushNotificationStatus: pushNotificationStatus,
                                         notificationsTracker: notificationsTracker,
-                                        updateEventsDelegate: delegate,
+                                        updateEventsDelegate: self,
                                         sharedContainerURL: sharedContainerURL,
                                         accountIdentifier: accountIdentifier,
                                         syncMOC: syncContext
@@ -88,3 +86,10 @@ class StrategyFactory {
     }
 }
 
+
+
+extension StrategyFactory: UpdateEventsDelegate {
+    func didReceive(events: [ZMUpdateEvent], in moc: NSManagedObjectContext) {
+        delegate?.didReceive(events: events, in: moc)
+    }
+}
