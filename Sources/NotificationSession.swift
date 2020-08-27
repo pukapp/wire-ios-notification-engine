@@ -174,7 +174,7 @@ public class NotificationSession {
     private let applicationStatusDirectory : ApplicationStatusDirectory
 
     /// The list to which save notifications of the UI moc are appended and persistet
-    private let saveNotificationPersistence: ContextDidSaveNotificationPersistence
+    fileprivate let saveNotificationPersistence: ContextDidSaveNotificationPersistence
 
     private var contextSaveObserverToken: NSObjectProtocol?
 
@@ -250,6 +250,22 @@ public class NotificationSession {
             applicationGroupIdentifier: applicationGroupIdentifier
         )
         
+        let cacheLocation = FileManager.default.cachesURL(forAppGroupIdentifier: applicationGroupIdentifier, accountIdentifier: accountIdentifier)
+        
+        let userImageCache = UserImageLocalCache(location: cacheLocation)
+
+        directory.syncContext.zm_userImageCache = userImageCache
+        
+        let conversationAvatarCache = ConversationAvatarLocalCache(location: cacheLocation)
+        
+        directory.syncContext.zm_conversationAvatarCache = conversationAvatarCache
+        
+        let fileAssetCache = FileAssetCache(location: cacheLocation)
+        
+        directory.syncContext.zm_fileAssetCache = fileAssetCache
+        directory.syncContext.zm_searchUserCache = NSCache()
+        directory.syncContext.zm_BGPMemberAssetCache = NSCache()
+        
         try self.init(
             contextDirectory: directory,
             transportSession: transportSession,
@@ -259,6 +275,12 @@ public class NotificationSession {
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier
         )
+        
+        NotificationCenter.default.addObserver(
+        self,
+        selector: #selector(NotificationSession.contextDidSave(_:)),
+        name:.NSManagedObjectContextDidSave,
+        object: directory.syncContext)
     }
     
     internal init(contextDirectory: ManagedObjectContextDirectory,
@@ -331,5 +353,11 @@ public class NotificationSession {
         transportSession.reachability.tearDown()
         transportSession.tearDown()
         strategyFactory.tearDown()
+    }
+}
+
+extension NotificationSession {
+    @objc func contextDidSave(_ note: Notification){
+        self.saveNotificationPersistence.add(note)
     }
 }
