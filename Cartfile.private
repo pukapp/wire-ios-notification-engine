@@ -1,4 +1,4 @@
-github "wireapp/wire-ios-mocktransport" ~> 119.0
+github "pukapp/wire-ios-mocktransport" "secret"
 github "wireapp/wire-ios-testing" ~> 22.0
 
 
