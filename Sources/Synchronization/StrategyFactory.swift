@@ -20,39 +20,38 @@ import Foundation
 import WireRequestStrategy
 import WireTransport.ZMRequestCancellation
 import WireLinkPreview
+import WireSyncEngine
 
 class StrategyFactory {
 
     unowned let syncContext: NSManagedObjectContext
-    let applicationStatus: ApplicationStatus
-    let pushNotificationStatus: PushNotificationStatus
-    let notificationsTracker: NotificationsTracker?
+    unowned let eventContext: NSManagedObjectContext
     private(set) var strategies = [AnyObject]()
-    public var delegate: UpdateEventsDelegate?
+    private(set) weak var delegate: NotificationSessionDelegate?
     
     private(set) var sharedContainerURL: URL
     private(set) var accountIdentifier: UUID
 
     private var tornDown = false
+    private var eventId: String
 
     init(syncContext: NSManagedObjectContext,
-         applicationStatus: ApplicationStatus,
-         pushNotificationStatus: PushNotificationStatus,
-         notificationsTracker: NotificationsTracker?,
+         eventContext: NSManagedObjectContext,
+         notificationSessionDelegate: NotificationSessionDelegate?,
          sharedContainerURL: URL,
-         accountIdentifier: UUID) {
+         accountIdentifier: UUID,
+         eventId: String) {
         self.syncContext = syncContext
-        self.applicationStatus = applicationStatus
-        self.pushNotificationStatus = pushNotificationStatus
-        self.notificationsTracker = notificationsTracker
-        
+        self.eventContext = eventContext
+        self.delegate = notificationSessionDelegate
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
-        
+        self.eventId = eventId
         self.strategies = createStrategies()
     }
 
     deinit {
+        print("StrategyFactory deinit")
         precondition(tornDown, "Need to call `tearDown` before `deinit`")
     }
 
@@ -67,29 +66,16 @@ class StrategyFactory {
 
     private func createStrategies() -> [AnyObject] {
         return [
-            
             createPushNotificationStrategy()
         ]
     }
     
     private func createPushNotificationStrategy() -> PushNotificationStrategy {
         return PushNotificationStrategy(withManagedObjectContext: syncContext,
-                                        applicationStatus: applicationStatus,
-                                        pushNotificationStatus: pushNotificationStatus,
-                                        notificationsTracker: notificationsTracker,
-                                        updateEventsDelegate: self,
+                                        eventObjectContext: eventContext,
+                                        notificationSessionDelegate: delegate,
                                         sharedContainerURL: sharedContainerURL,
                                         accountIdentifier: accountIdentifier,
-                                        syncMOC: syncContext
-                                        
-        )
-    }
-}
-
-
-
-extension StrategyFactory: UpdateEventsDelegate {
-    func didReceive(events: [ZMUpdateEvent], in moc: NSManagedObjectContext) {
-        delegate?.didReceive(events: events, in: moc)
+                                        eventId: self.eventId)
     }
 }

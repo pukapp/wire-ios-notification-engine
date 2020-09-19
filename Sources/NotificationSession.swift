@@ -23,64 +23,6 @@ import WireTransport
 import WireRequestStrategy
 import WireLinkPreview
 
-class DeliveryConfirmationDummy : NSObject, DeliveryConfirmationDelegate {
-
-    static var sendDeliveryReceipts: Bool {
-        return false
-    }
-
-    var needsToSyncMessages: Bool {
-        return false
-    }
-
-    func needsToConfirmMessage(_ messageNonce: UUID) {
-        // nop
-    }
-
-    func didConfirmMessage(_ messageNonce: UUID) {
-        // nop
-    }
-
-}
-
-class ClientRegistrationStatus : NSObject, ClientRegistrationDelegate {
-    
-    let context : NSManagedObjectContext
-    
-    init(context: NSManagedObjectContext) {
-        self.context = context
-    }
-    
-    var clientIsReadyForRequests: Bool {
-        if let clientId = context.persistentStoreMetadata(forKey: "PersistedClientId") as? String { // TODO move constant into shared framework
-            return !clientId.isEmpty
-        }
-        
-        return false
-    }
-    
-    func didDetectCurrentClientDeletion() {
-        // nop
-    }
-}
-
-class AuthenticationStatus : AuthenticationStatusProvider {
-    
-    let transportSession : ZMTransportSession
-    
-    init(transportSession: ZMTransportSession) {
-        self.transportSession = transportSession
-    }
-    
-    var state: AuthenticationState {
-        return isLoggedIn ? .authenticated : .unauthenticated
-    }
-    
-    private var isLoggedIn : Bool {
-        return transportSession.cookieStorage.authenticationCookieData != nil
-    }
-    
-}
 
 extension BackendEnvironmentProvider {
     func cookieStorage(for account: Account) -> ZMPersistentCookieStorage {
@@ -93,67 +35,6 @@ extension BackendEnvironmentProvider {
     }
 }
 
-class ApplicationStatusDirectory : ApplicationStatus {
-
-    let transportSession : ZMTransportSession
-
-    let deliveryConfirmationDummy : DeliveryConfirmationDummy
-
-    /// The authentication status used to verify a user is authenticated
-    public let authenticationStatus: AuthenticationStatusProvider
-
-    /// The client registration status used to lookup if a user has registered a self client
-    public let clientRegistrationStatus : ClientRegistrationDelegate
-
-    public let linkPreviewDetector: LinkPreviewDetectorType
-
-    public init(managedObjectContext: NSManagedObjectContext, transportSession: ZMTransportSession, authenticationStatus: AuthenticationStatusProvider, clientRegistrationStatus: ClientRegistrationStatus, linkPreviewDetector: LinkPreviewDetectorType/*, syncStateDelegate: ZMSyncStateDelegate*/) {
-        self.transportSession = transportSession
-        self.authenticationStatus = authenticationStatus
-        self.clientRegistrationStatus = clientRegistrationStatus
-        self.deliveryConfirmationDummy = DeliveryConfirmationDummy()
-        self.linkPreviewDetector = linkPreviewDetector
-    }
-
-    public convenience init(syncContext: NSManagedObjectContext, transportSession: ZMTransportSession) {
-        let authenticationStatus = AuthenticationStatus(transportSession: transportSession)
-        let clientRegistrationStatus = ClientRegistrationStatus(context: syncContext)
-        let linkPreviewDetector = LinkPreviewDetector()
-        self.init(managedObjectContext: syncContext,transportSession: transportSession, authenticationStatus: authenticationStatus, clientRegistrationStatus: clientRegistrationStatus, linkPreviewDetector: linkPreviewDetector)
-    }
-
-    public var synchronizationState: SynchronizationState {
-        if clientRegistrationStatus.clientIsReadyForRequests {
-            return .eventProcessing
-        } else {
-            return .unauthenticated
-        }
-    }
-
-    public var operationState: OperationState {
-        return .background
-    }
-
-    public let notificationFetchStatus: BackgroundNotificationFetchStatus = .done
-
-    public var clientRegistrationDelegate: ClientRegistrationDelegate {
-        return self.clientRegistrationStatus
-    }
-
-    public var requestCancellation: ZMRequestCancellation {
-        return transportSession
-    }
-
-    public var deliveryConfirmation: DeliveryConfirmationDelegate {
-        return deliveryConfirmationDummy
-    }
-
-    func requestSlowSync() {
-        // we don't do slow syncing in the share engine
-    }
-
-}
-
 /// A syncing layer for the notification processing
 /// - note: this is the entry point of this framework. Users of
 /// the framework should create an instance as soon as possible in
@@ -161,41 +42,15 @@ class ApplicationStatusDirectory : ApplicationStatus {
 /// for the entire lifetime.
 public class NotificationSession {
     
-    /// The `NSManagedObjectContext` used to retrieve the conversations
-    var userInterfaceContext: NSManagedObjectContext {
-        return contextDirectory.uiContext
-    }
-
-    private var syncContext: NSManagedObjectContext {
-        return contextDirectory.syncContext
-    }
-
-    /// Directory of all application statuses
-    private let applicationStatusDirectory : ApplicationStatusDirectory
-
-    /// The list to which save notifications of the UI moc are appended and persistet
-    fileprivate let saveNotificationPersistence: ContextDidSaveNotificationPersistence
-
-    private var contextSaveObserverToken: NSObjectProtocol?
-
-    let transportSession: ZMTransportSession
+    public let transportSession: ZMTransportSession
     
-    private var contextDirectory: ManagedObjectContextDirectory!
-        
-    /// The `ZMConversationListDirectory` containing all conversation lists
-    private var directory: ZMConversationListDirectory {
-        return userInterfaceContext.conversationListDirectory()
-    }
+    public var syncMoc: NSManagedObjectContext!
+    
+    public var eventMoc: NSManagedObjectContext!
     
     private let operationLoop: RequestGeneratingOperationLoop
 
     private let strategyFactory: StrategyFactory
-    
-    public var delegate: UpdateEventsDelegate? {
-        didSet {
-            self.strategyFactory.delegate = delegate
-        }
-    }
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -207,138 +62,97 @@ public class NotificationSession {
     public convenience init(applicationGroupIdentifier: String,
                             accountIdentifier: UUID,
                             environment: BackendEnvironmentProvider,
-                            analytics: AnalyticsType?
-    ) throws {
+                            delegate: NotificationSessionDelegate?,
+                            token: ZMAccessToken?,
+                            eventId: String) throws {
        
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
         
-        let group = DispatchGroup()
+        let accountDirectory = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
         
-        var directory: ManagedObjectContextDirectory!
-        group.enter()
-        StorageStack.shared.createManagedObjectContextDirectory(
-            accountIdentifier: accountIdentifier,
-            applicationContainer: sharedContainerURL,
-            startedMigrationCallback: {  },
-            completionHandler: { contextDirectory in
-                directory = contextDirectory
-                group.leave()
-            }
-        )
-        
-        var didCreateStorageStack = false
-        group.notify(queue: .global()) {
-            didCreateStorageStack = true
+        let storeFile = accountDirectory.appendingPersistentStoreLocation()
+        let model = NSManagedObjectModel.loadModel()
+        let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let options = NSPersistentStoreCoordinator.persistentStoreOptions(supportsMigration: false)
+        try psc.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: storeFile, options: options)
+        let moc = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        moc.markAsSyncContext()
+        moc.performAndWait {
+            moc.persistentStoreCoordinator = psc
+            ZMUser.selfUser(in: moc)
+            moc.setupUserKeyStore(accountDirectory: accountDirectory, applicationContainer: sharedContainerURL)
         }
         
-        while !didCreateStorageStack {
-            if !RunLoop.current.run(mode: RunLoop.Mode.default, before: Date(timeIntervalSinceNow: 0.002)) {
-                Thread.sleep(forTimeInterval: 0.002)
-            }
-        }
+        let eventMoc = NSManagedObjectContext.createEventContext(withSharedContainerURL: sharedContainerURL, userIdentifier: accountIdentifier)
         
         let cookieStorage = ZMPersistentCookieStorage(forServerName: environment.backendURL.host!, userIdentifier: accountIdentifier)
         let reachabilityGroup = ZMSDispatchGroup(dispatchGroup: DispatchGroup(), label: "Sharing session reachability")!
         let serverNames = [environment.backendURL, environment.backendWSURL].compactMap { $0.host }
         let reachability = ZMReachability(serverNames: serverNames, group: reachabilityGroup)
         
-        let transportSession =  ZMTransportSession(
+        let transportSession = ZMTransportSession(
             environment: environment,
             cookieStorage: cookieStorage,
             reachability: reachability,
-            initialAccessToken: nil,
+            initialAccessToken: token,
             applicationGroupIdentifier: applicationGroupIdentifier
         )
         
-        let cacheLocation = FileManager.default.cachesURL(forAppGroupIdentifier: applicationGroupIdentifier, accountIdentifier: accountIdentifier)
-        
-        let userImageCache = UserImageLocalCache(location: cacheLocation)
-
-        directory.syncContext.zm_userImageCache = userImageCache
-        
-        let conversationAvatarCache = ConversationAvatarLocalCache(location: cacheLocation)
-        
-        directory.syncContext.zm_conversationAvatarCache = conversationAvatarCache
-        
-        let fileAssetCache = FileAssetCache(location: cacheLocation)
-        
-        directory.syncContext.zm_fileAssetCache = fileAssetCache
-        directory.syncContext.zm_searchUserCache = NSCache()
-        directory.syncContext.zm_BGPMemberAssetCache = NSCache()
-        
         try self.init(
-            contextDirectory: directory,
+            moc: moc,
+            eventMoc: eventMoc,
             transportSession: transportSession,
-            cachesDirectory: FileManager.default.cachesURLForAccount(with: accountIdentifier, in: sharedContainerURL),
             accountContainer: StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL),
-            analytics: analytics,
+            delegate: delegate,
             sharedContainerURL: sharedContainerURL,
-            accountIdentifier: accountIdentifier
-        )
-        
-        NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(NotificationSession.contextDidSave(_:)),
-        name:.NSManagedObjectContextDidSave,
-        object: directory.syncContext)
+            accountIdentifier: accountIdentifier,
+            eventId: eventId)
     }
     
-    internal init(contextDirectory: ManagedObjectContextDirectory,
+    internal init(moc: NSManagedObjectContext,
+                  eventMoc: NSManagedObjectContext,
                   transportSession: ZMTransportSession,
-                  cachesDirectory: URL,
-                  saveNotificationPersistence: ContextDidSaveNotificationPersistence,
-                  applicationStatusDirectory: ApplicationStatusDirectory,
                   operationLoop: RequestGeneratingOperationLoop,
                   strategyFactory: StrategyFactory
         ) throws {
         
-        self.contextDirectory = contextDirectory
+        self.syncMoc = moc
+        self.eventMoc = moc
         self.transportSession = transportSession
-        self.saveNotificationPersistence = saveNotificationPersistence
-        self.applicationStatusDirectory = applicationStatusDirectory
         self.operationLoop = operationLoop
         self.strategyFactory = strategyFactory
         
         RequestAvailableNotification.notifyNewRequestsAvailable(nil)
     }
     
-    public convenience init(contextDirectory: ManagedObjectContextDirectory,
+    public convenience init(moc: NSManagedObjectContext,
+                            eventMoc: NSManagedObjectContext,
                             transportSession: ZMTransportSession,
-                            cachesDirectory: URL,
                             accountContainer: URL,
-                            analytics: AnalyticsType?,
+                            delegate: NotificationSessionDelegate?,
                             sharedContainerURL: URL,
-                            accountIdentifier: UUID) throws {
+                            accountIdentifier: UUID,
+                            eventId: String) throws {
         
-        let applicationStatusDirectory = ApplicationStatusDirectory(syncContext: contextDirectory.syncContext, transportSession: transportSession)
-        let pushNotificationStatus = PushNotificationStatus(managedObjectContext: contextDirectory.syncContext)
-        
-        let notificationsTracker = (analytics != nil) ? NotificationsTracker(analytics: analytics!) : nil
-        let strategyFactory = StrategyFactory(syncContext: contextDirectory.syncContext,
-                                              applicationStatus: applicationStatusDirectory,
-                                              pushNotificationStatus: pushNotificationStatus,
-                                              notificationsTracker: notificationsTracker,
+        let strategyFactory = StrategyFactory(syncContext: moc,
+                                              eventContext: eventMoc,
+                                              notificationSessionDelegate: delegate,
                                               sharedContainerURL: sharedContainerURL,
-                                              accountIdentifier: accountIdentifier)
+                                              accountIdentifier: accountIdentifier,
+                                              eventId: eventId)
         
         let requestGeneratorStore = RequestGeneratorStore(strategies: strategyFactory.strategies)
         
         let operationLoop = RequestGeneratingOperationLoop(
-            userContext: contextDirectory.uiContext,
-            syncContext: contextDirectory.syncContext,
             callBackQueue: .main,
             requestGeneratorStore: requestGeneratorStore,
             transportSession: transportSession
         )
         
-        let saveNotificationPersistence = ContextDidSaveNotificationPersistence(accountContainer: accountContainer)
-        
         try self.init(
-            contextDirectory: contextDirectory,
+            moc: moc,
+            eventMoc: eventMoc,
             transportSession: transportSession,
-            cachesDirectory: cachesDirectory,
-            saveNotificationPersistence: saveNotificationPersistence,
-            applicationStatusDirectory: applicationStatusDirectory,
             operationLoop: operationLoop,
             strategyFactory: strategyFactory
         )
@@ -346,18 +160,9 @@ public class NotificationSession {
     }
 
     deinit {
-        if let token = contextSaveObserverToken {
-            NotificationCenter.default.removeObserver(token)
-            contextSaveObserverToken = nil
-        }
+        print("NotificationSession deinit")
         transportSession.reachability.tearDown()
         transportSession.tearDown()
         strategyFactory.tearDown()
-    }
-}
-
-extension NotificationSession {
-    @objc func contextDidSave(_ note: Notification){
-        self.saveNotificationPersistence.add(note)
     }
 }

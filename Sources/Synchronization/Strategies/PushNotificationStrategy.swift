@@ -17,43 +17,50 @@
 //
 
 import WireRequestStrategy
+import WireSyncEngine
 
-public protocol UpdateEventsDelegate: class {
-    func didReceive(events: [ZMUpdateEvent], in moc: NSManagedObjectContext)
+public protocol NotificationSessionDelegate: class {
+    func modifyNotification(_ alert: ClientNotification)
+}
+
+public struct ClientNotification {
+    public var title: String
+    public var body: String
+    public var categoryIdentifier: String
+    public var userInfo: [AnyHashable : Any]?
+    public var sound: UNNotificationSound?
+    public var threadIdentifier: String?
+    public var conversationID: String?
 }
 
 public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestGeneratorSource {
     
-    var sync: NotificationStreamSync!
-    private var pushNotificationStatus: PushNotificationStatus!
-    private var eventProcessor: UpdateEventProcessor!
-    private var delegate: UpdateEventsDelegate?
-    private var moc: NSManagedObjectContext!
+    var sync: NotificationSingleSync!
+    private weak var eventProcessor: UpdateEventProcessor!
+    private weak var delegate: NotificationSessionDelegate?
+    private unowned var moc: NSManagedObjectContext!
     
-    var eventDecoder: EventDecoder!
-    var eventMOC: NSManagedObjectContext!
+    var eventDecrypter: EventDecrypter!
+    private var eventId: String
+    private var accountIdentifier: UUID
     
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
-                applicationStatus: ApplicationStatus,
-                pushNotificationStatus: PushNotificationStatus,
-                notificationsTracker: NotificationsTracker?,
-                updateEventsDelegate: UpdateEventsDelegate?,
+                eventObjectContext: NSManagedObjectContext,
+                notificationSessionDelegate: NotificationSessionDelegate?,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID,
-                syncMOC: NSManagedObjectContext) {
+                eventId: String) {
         
+        self.eventId = eventId
+        self.accountIdentifier = accountIdentifier
         super.init(withManagedObjectContext: managedObjectContext,
-                   applicationStatus: applicationStatus)
-       
-        sync = NotificationStreamSync(moc: managedObjectContext,
-                                      notificationsTracker: notificationsTracker,
-                                      delegate: self)
+                   applicationStatus: nil)
+        
+        sync = NotificationSingleSync(moc: managedObjectContext, delegate: self, eventId: eventId)
         self.eventProcessor = self
-        self.pushNotificationStatus = pushNotificationStatus
-        self.delegate = updateEventsDelegate
+        self.delegate = notificationSessionDelegate
         self.moc = managedObjectContext
-        self.eventMOC = NSManagedObjectContext.createEventContext(withSharedContainerURL: sharedContainerURL, userIdentifier: accountIdentifier)
-        self.eventDecoder = EventDecoder(eventMOC: eventMOC, syncMOC: syncMOC)
+        self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext, eventMoc: eventObjectContext)
     }
     
     public override func nextRequestIfAllowed() -> ZMTransportRequest? {
@@ -65,40 +72,74 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
     }
     
     public var requestGenerators: [ZMRequestGenerator] {
-           return [sync]
-       }
+        return [sync]
+    }
+    
+    deinit {
+        print("PushNotificationStrategy deinit")
+    }
+    
 }
 
-extension PushNotificationStrategy: NotificationStreamSyncDelegate {
-    public func fetchedEvents(_ events: [ZMUpdateEvent], hasMoreToFetch: Bool) {
-        var eventIds: [UUID] = []
-        var parsedEvents: [ZMUpdateEvent] = []
-        var latestEventId: UUID? = nil
-        for event in events {
-            event.appendDebugInformation("From missing update events transcoder, processUpdateEventsAndReturnLastNotificationIDFromPayload")
-            parsedEvents.append(event)
-            if let uuid = event.uuid {
-                eventIds.append(uuid)
-            }
-            if !event.isTransient {
-                latestEventId = event.uuid
-            }
-        }
-        eventProcessor.process(updateEvents: parsedEvents, ignoreBuffer: true)
-        pushNotificationStatus.didFetch(eventIds: eventIds, lastEventId: latestEventId, finished: hasMoreToFetch)
+extension PushNotificationStrategy: NotificationSingleSyncDelegate {
+    
+    public func fetchedEvent(_ event: ZMUpdateEvent) {
+        eventProcessor.decryptUpdateEvents([event], ignoreBuffer: true)
     }
     
     public func failedFetchingEvents() {
-        pushNotificationStatus.didFailToFetchEvents()
+        
     }
 }
 
 extension PushNotificationStrategy: UpdateEventProcessor {
     
-    public func process(updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
-        eventDecoder.processEvents(updateEvents, block: { (decryptedUpdateEvents) in
-             delegate?.didReceive(events: decryptedUpdateEvents, in: moc)
-        }, isNewNotificationVersion: true)
+    @objc(processUpdateEvents:ignoreBuffer:)
+    public func processUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+        
     }
     
+    @objc(decryptUpdateEvents:ignoreBuffer:)
+    public func decryptUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+        let decryptedUpdateEvents = eventDecrypter.decryptEvents(updateEvents)
+        let localNotifications = self.convertToLocalNotifications(decryptedUpdateEvents, moc: self.moc)
+        var alert = ClientNotification(title: "", body: "", categoryIdentifier: "")
+        if let notification = localNotifications.first {
+            alert.title = notification.title ?? ""
+            alert.body = notification.body
+            alert.categoryIdentifier = notification.category
+            alert.sound = UNNotificationSound(named: convertToUNNotificationSoundName(notification.sound.name))
+            alert.userInfo = notification.userInfo?.storage
+            // only group non ephemeral messages
+            if let conversationID = notification.conversationID {
+                switch notification.type {
+                case .message(.ephemeral): break
+                default: alert.conversationID = conversationID.transportString()
+                }
+            }
+            
+        }
+        // The notification service extension API doesn't support generating multiple user notifications. In this case, the body text will be replaced in the UI project.
+        self.delegate?.modifyNotification(alert)
+    }
+    
+    public func storeAndProcessUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+        // Events will be processed in the foreground
+    }
+    
+}
+
+extension PushNotificationStrategy {
+    
+    private func convertToLocalNotifications(_ events: [ZMUpdateEvent], moc: NSManagedObjectContext) -> [ZMLocalNotification] {
+        return events.compactMap { event in
+            var conversation: ZMConversation?
+            if let conversationID = event.conversationUUID() {
+                print("conversationID: \(conversationID)")
+                conversation = ZMConversation.init(noRowCacheWithRemoteID: conversationID, createIfNeeded: false, in: moc)
+            }
+            guard event.senderUUID() != self.accountIdentifier else {return nil}
+            return ZMLocalNotification(noticationEvent: event, conversation: conversation, managedObjectContext: moc)
+        }
+    }
 }
