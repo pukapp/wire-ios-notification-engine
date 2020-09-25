@@ -25,7 +25,6 @@ import WireSyncEngine
 class StrategyFactory {
 
     unowned let syncContext: NSManagedObjectContext
-    unowned let eventContext: NSManagedObjectContext
     private(set) var strategies = [AnyObject]()
     private(set) weak var delegate: NotificationSessionDelegate?
     
@@ -34,19 +33,20 @@ class StrategyFactory {
 
     private var tornDown = false
     private var eventId: String
+    private var userDefault: UserDefaults
 
     init(syncContext: NSManagedObjectContext,
-         eventContext: NSManagedObjectContext,
          notificationSessionDelegate: NotificationSessionDelegate?,
          sharedContainerURL: URL,
          accountIdentifier: UUID,
-         eventId: String) {
+         eventId: String,
+         userDefault: UserDefaults) {
         self.syncContext = syncContext
-        self.eventContext = eventContext
         self.delegate = notificationSessionDelegate
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
         self.eventId = eventId
+        self.userDefault = userDefault
         self.strategies = createStrategies()
     }
 
@@ -72,10 +72,10 @@ class StrategyFactory {
     
     private func createPushNotificationStrategy() -> PushNotificationStrategy {
         return PushNotificationStrategy(withManagedObjectContext: syncContext,
-                                        eventObjectContext: eventContext,
                                         notificationSessionDelegate: delegate,
                                         sharedContainerURL: sharedContainerURL,
                                         accountIdentifier: accountIdentifier,
-                                        eventId: self.eventId)
+                                        eventId: self.eventId,
+                                        userDefault: self.userDefault)
     }
 }

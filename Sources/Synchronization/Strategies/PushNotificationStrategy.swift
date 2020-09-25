@@ -43,16 +43,18 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
     var eventDecrypter: EventDecrypter!
     private var eventId: String
     private var accountIdentifier: UUID
+    private var userDefault: UserDefaults
     
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
-                eventObjectContext: NSManagedObjectContext,
                 notificationSessionDelegate: NotificationSessionDelegate?,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID,
-                eventId: String) {
+                eventId: String,
+                userDefault: UserDefaults) {
         
         self.eventId = eventId
         self.accountIdentifier = accountIdentifier
+        self.userDefault = userDefault
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
         
@@ -60,7 +62,7 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
         self.eventProcessor = self
         self.delegate = notificationSessionDelegate
         self.moc = managedObjectContext
-        self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext, eventMoc: eventObjectContext)
+        self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext, userDefault: userDefault)
     }
     
     public override func nextRequestIfAllowed() -> ZMTransportRequest? {
