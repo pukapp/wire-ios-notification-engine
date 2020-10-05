@@ -31,7 +31,13 @@ public struct ClientNotification {
     public var sound: UNNotificationSound?
     public var threadIdentifier: String?
     public var conversationID: String?
+    
+    public var isInValided: Bool {
+        return title.count == 0 && body.count == 0 && categoryIdentifier.count == 0
+    }
 }
+
+private var exLog = ExLog(tag: "NotificationExtension")
 
 public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestGeneratorSource {
     
@@ -43,18 +49,15 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
     var eventDecrypter: EventDecrypter!
     private var eventId: String
     private var accountIdentifier: UUID
-    private var userDefault: UserDefaults
     
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
                 notificationSessionDelegate: NotificationSessionDelegate?,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID,
-                eventId: String,
-                userDefault: UserDefaults) {
+                eventId: String) {
         
         self.eventId = eventId
         self.accountIdentifier = accountIdentifier
-        self.userDefault = userDefault
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
         
@@ -62,7 +65,7 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
         self.eventProcessor = self
         self.delegate = notificationSessionDelegate
         self.moc = managedObjectContext
-        self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext, userDefault: userDefault)
+        self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext)
     }
     
     public override func nextRequestIfAllowed() -> ZMTransportRequest? {
@@ -86,6 +89,7 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
 extension PushNotificationStrategy: NotificationSingleSyncDelegate {
     
     public func fetchedEvent(_ event: ZMUpdateEvent) {
+        exLog.info("pushNotificationStrategy fetchedEvent \(event.debugInformation)")
         eventProcessor.decryptUpdateEvents([event], ignoreBuffer: true)
     }
     
@@ -103,8 +107,11 @@ extension PushNotificationStrategy: UpdateEventProcessor {
     
     @objc(decryptUpdateEvents:ignoreBuffer:)
     public func decryptUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+        exLog.info("ready for decrypt event \(String(describing: updateEvents.first.debugDescription))")
         let decryptedUpdateEvents = eventDecrypter.decryptEvents(updateEvents)
+        exLog.info("already decrypt event \(String(describing: decryptedUpdateEvents.first?.debugDescription))")
         let localNotifications = self.convertToLocalNotifications(decryptedUpdateEvents, moc: self.moc)
+        exLog.info("convertToLocalNotifications \(String(describing: localNotifications.first.debugDescription))")
         var alert = ClientNotification(title: "", body: "", categoryIdentifier: "")
         if let notification = localNotifications.first {
             alert.title = notification.title ?? ""
@@ -137,7 +144,7 @@ extension PushNotificationStrategy {
         return events.compactMap { event in
             var conversation: ZMConversation?
             if let conversationID = event.conversationUUID() {
-                print("conversationID: \(conversationID)")
+                exLog.info("convertToLocalNotifications conversationID: \(conversationID)")
                 conversation = ZMConversation.init(noRowCacheWithRemoteID: conversationID, createIfNeeded: false, in: moc)
             }
             guard event.senderUUID() != self.accountIdentifier else {return nil}

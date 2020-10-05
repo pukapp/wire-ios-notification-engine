@@ -33,20 +33,17 @@ class StrategyFactory {
 
     private var tornDown = false
     private var eventId: String
-    private var userDefault: UserDefaults
 
     init(syncContext: NSManagedObjectContext,
          notificationSessionDelegate: NotificationSessionDelegate?,
          sharedContainerURL: URL,
          accountIdentifier: UUID,
-         eventId: String,
-         userDefault: UserDefaults) {
+         eventId: String) {
         self.syncContext = syncContext
         self.delegate = notificationSessionDelegate
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
         self.eventId = eventId
-        self.userDefault = userDefault
         self.strategies = createStrategies()
     }
 
@@ -75,7 +72,6 @@ class StrategyFactory {
                                         notificationSessionDelegate: delegate,
                                         sharedContainerURL: sharedContainerURL,
                                         accountIdentifier: accountIdentifier,
-                                        eventId: self.eventId,
-                                        userDefault: self.userDefault)
+                                        eventId: self.eventId)
     }
 }

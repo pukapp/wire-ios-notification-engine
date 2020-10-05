@@ -51,8 +51,6 @@ public class NotificationSession {
     private let operationLoop: RequestGeneratingOperationLoop
 
     private let strategyFactory: StrategyFactory
-    
-    private let userDefault: UserDefaults
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -66,8 +64,7 @@ public class NotificationSession {
                             environment: BackendEnvironmentProvider,
                             delegate: NotificationSessionDelegate?,
                             token: ZMAccessToken?,
-                            eventId: String,
-                            userDefault: UserDefaults) throws {
+                            eventId: String) throws {
        
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
         
@@ -106,22 +103,19 @@ public class NotificationSession {
             delegate: delegate,
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier,
-            eventId: eventId,
-            userDefault: userDefault)
+            eventId: eventId)
     }
     
     internal init(moc: NSManagedObjectContext,
                   transportSession: ZMTransportSession,
                   operationLoop: RequestGeneratingOperationLoop,
-                  strategyFactory: StrategyFactory,
-                  userDefault: UserDefaults
+                  strategyFactory: StrategyFactory
         ) throws {
         
         self.syncMoc = moc
         self.transportSession = transportSession
         self.operationLoop = operationLoop
         self.strategyFactory = strategyFactory
-        self.userDefault = userDefault
         
         RequestAvailableNotification.notifyNewRequestsAvailable(nil)
     }
@@ -132,15 +126,13 @@ public class NotificationSession {
                             delegate: NotificationSessionDelegate?,
                             sharedContainerURL: URL,
                             accountIdentifier: UUID,
-                            eventId: String,
-                            userDefault: UserDefaults) throws {
+                            eventId: String) throws {
         
         let strategyFactory = StrategyFactory(syncContext: moc,
                                               notificationSessionDelegate: delegate,
                                               sharedContainerURL: sharedContainerURL,
                                               accountIdentifier: accountIdentifier,
-                                              eventId: eventId,
-                                              userDefault: userDefault)
+                                              eventId: eventId)
         
         let requestGeneratorStore = RequestGeneratorStore(strategies: strategyFactory.strategies)
         
@@ -154,8 +146,7 @@ public class NotificationSession {
             moc: moc,
             transportSession: transportSession,
             operationLoop: operationLoop,
-            strategyFactory: strategyFactory,
-            userDefault: userDefault
+            strategyFactory: strategyFactory
         )
         
     }
