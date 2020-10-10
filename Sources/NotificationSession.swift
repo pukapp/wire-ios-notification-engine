@@ -45,9 +45,7 @@ public class NotificationSession {
     public let transportSession: ZMTransportSession
     
     public var syncMoc: NSManagedObjectContext!
-    
-    public var eventMoc: NSManagedObjectContext!
-    
+        
     private let operationLoop: RequestGeneratingOperationLoop
 
     private let strategyFactory: StrategyFactory
