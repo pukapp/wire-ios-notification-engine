@@ -112,6 +112,8 @@ final class OperationLoop : NSObject, RequestAvailableObserver {
     func newRequestsAvailable() {
         requestAvailableClosure?()
     }
+    
+    func newUIRequestsAvailable() {}
 
 }
 
