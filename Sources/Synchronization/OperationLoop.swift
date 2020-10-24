@@ -113,7 +113,7 @@ final class OperationLoop : NSObject, RequestAvailableObserver {
         requestAvailableClosure?()
     }
     
-    func newUIRequestsAvailable() {}
+    func newMsgRequestsAvailable() {}
 
 }
 
