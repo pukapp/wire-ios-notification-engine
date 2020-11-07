@@ -23,7 +23,7 @@ import WireRequestStrategy
 
 let contextWasMergedNotification = Notification.Name("zm_contextWasSaved")
 
-public final class RequestGeneratorStore {
+public class RequestGeneratorStore {
 
     let requestGenerators: [ZMTransportRequestGenerator]
     private var isTornDown = false
@@ -80,7 +80,7 @@ public final class RequestGeneratorStore {
 }
 
 
-final class RequestGeneratorObserver {
+public class RequestGeneratorObserver {
     
     public var observedGenerator: ZMTransportRequestGenerator? = nil
     
@@ -91,15 +91,17 @@ final class RequestGeneratorObserver {
     
 }
 
-final class OperationLoop : NSObject, RequestAvailableObserver {
+public class OperationLoop : NSObject, RequestAvailableObserver {
 
     typealias RequestAvailableClosure = () -> Void
     private let callBackQueue: OperationQueue
     private var tokens: [NSObjectProtocol] = []
-    public var requestAvailableClosure: RequestAvailableClosure?
+    var requestAvailableClosure: RequestAvailableClosure?
+    private var moc: NSManagedObjectContext
 
-    init(callBackQueue: OperationQueue = .main) {
+    init(callBackQueue: OperationQueue = .main, moc: NSManagedObjectContext) {
         self.callBackQueue = callBackQueue
+        self.moc = moc
         super.init()
         RequestAvailableNotification.addObserver(self)
     }
@@ -109,30 +111,32 @@ final class OperationLoop : NSObject, RequestAvailableObserver {
         tokens.forEach(NotificationCenter.default.removeObserver)
     }
     
-    func newRequestsAvailable() {
+    public func newRequestsAvailable() {
         requestAvailableClosure?()
     }
     
-    func newMsgRequestsAvailable() {}
+    public func newMsgRequestsAvailable() {}
 
 }
 
-final class RequestGeneratingOperationLoop {
+public class RequestGeneratingOperationLoop {
 
     private let operationLoop: OperationLoop!
     private let callBackQueue: OperationQueue
+    private var moc: NSManagedObjectContext
     
     private let requestGeneratorStore: RequestGeneratorStore
     private let requestGeneratorObserver: RequestGeneratorObserver
     private unowned let transportSession: ZMTransportSession
     
 
-    init(callBackQueue: OperationQueue = .main, requestGeneratorStore: RequestGeneratorStore, transportSession: ZMTransportSession) {
+    init(callBackQueue: OperationQueue = .main, requestGeneratorStore: RequestGeneratorStore, transportSession: ZMTransportSession, moc: NSManagedObjectContext) {
+        self.moc = moc
         self.callBackQueue = callBackQueue
         self.requestGeneratorStore = requestGeneratorStore
         self.requestGeneratorObserver = RequestGeneratorObserver()
         self.transportSession = transportSession
-        self.operationLoop = OperationLoop(callBackQueue: callBackQueue)
+        self.operationLoop = OperationLoop(callBackQueue: callBackQueue, moc: moc)
 
         operationLoop.requestAvailableClosure = { [weak self] in self?.enqueueRequests() }
         requestGeneratorObserver.observedGenerator = { [weak self] in self?.requestGeneratorStore.nextRequest() }
@@ -144,12 +148,16 @@ final class RequestGeneratingOperationLoop {
     }
     
     fileprivate func enqueueRequests() {
-        var result : ZMTransportEnqueueResult
-        
-        repeat {
-            result = transportSession.attemptToEnqueueSyncRequest(generator: { [weak self] in self?.requestGeneratorObserver.nextRequest() })
-        } while result.didGenerateNonNullRequest && result.didHaveLessRequestThanMax
-        
+
+        self.moc.performGroupedBlock {
+            [weak self] in
+            guard let self = self else {return}
+            var result : ZMTransportEnqueueResult
+            repeat {
+                result = self.transportSession.attemptToEnqueueSyncRequest(generator: { [weak self] in self?.requestGeneratorObserver.nextRequest() })
+            } while result.didGenerateNonNullRequest && result.didHaveLessRequestThanMax
+            
+        }
     }
 }
 

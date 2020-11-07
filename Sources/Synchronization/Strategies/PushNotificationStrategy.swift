@@ -90,7 +90,7 @@ extension PushNotificationStrategy: NotificationSingleSyncDelegate {
     
     public func fetchedEvent(_ event: ZMUpdateEvent) {
         exLog.info("pushNotificationStrategy fetchedEvent \(event.debugInformation)")
-        eventProcessor.decryptUpdateEvents([event], ignoreBuffer: true)
+        eventProcessor.decryptUpdateEventsAndGenerateNotification([event])
     }
     
     public func failedFetchingEvents() {
@@ -100,16 +100,14 @@ extension PushNotificationStrategy: NotificationSingleSyncDelegate {
 
 extension PushNotificationStrategy: UpdateEventProcessor {
     
-    @objc(processUpdateEvents:ignoreBuffer:)
-    public func processUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+    public func processUpdateEvents(_ updateEvents: [ZMUpdateEvent]) {
         
     }
     
-    @objc(decryptUpdateEvents:ignoreBuffer:)
-    public func decryptUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
-        exLog.info("ready for decrypt event \(String(describing: updateEvents.first.debugDescription))")
+    public func decryptUpdateEventsAndGenerateNotification(_ updateEvents: [ZMUpdateEvent]) {
+        exLog.info("ready for decrypt event \(String(describing: updateEvents.first?.uuid?.transportString()))")
         let decryptedUpdateEvents = eventDecrypter.decryptEvents(updateEvents)
-        exLog.info("already decrypt event \(String(describing: decryptedUpdateEvents.first?.debugDescription))")
+        exLog.info("already decrypt event \(String(describing: decryptedUpdateEvents.first?.uuid?.transportString()))")
         let localNotifications = self.convertToLocalNotifications(decryptedUpdateEvents, moc: self.moc)
         exLog.info("convertToLocalNotifications \(String(describing: localNotifications.first.debugDescription))")
         var alert = ClientNotification(title: "", body: "", categoryIdentifier: "")
@@ -144,8 +142,9 @@ extension PushNotificationStrategy {
         return events.compactMap { event in
             var conversation: ZMConversation?
             if let conversationID = event.conversationUUID() {
-                exLog.info("convertToLocalNotifications conversationID: \(conversationID)")
+                exLog.info("convertToLocalNotifications conversationID: \(conversationID) before fetch conversation from coredata")
                 conversation = ZMConversation.init(noRowCacheWithRemoteID: conversationID, createIfNeeded: false, in: moc)
+                exLog.info("convertToLocalNotifications conversationID: \(conversationID) after fetch conversation from coredata")
             }
             guard event.senderUUID() != self.accountIdentifier else {return nil}
             return ZMLocalNotification(noticationEvent: event, conversation: conversation, managedObjectContext: moc)
