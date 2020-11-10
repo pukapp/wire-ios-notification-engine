@@ -63,7 +63,7 @@ public class NotificationSession {
                             delegate: NotificationSessionDelegate?,
                             token: ZMAccessToken?,
                             eventId: String,
-                            isHuge: Bool = false) throws {
+                            hugeConvId: String? = nil) throws {
        
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
         
@@ -101,7 +101,7 @@ public class NotificationSession {
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier,
             eventId: eventId,
-            isHuge: isHuge)
+            hugeConvId: hugeConvId)
     }
     
     public convenience init(moc: NSManagedObjectContext,
@@ -111,9 +111,9 @@ public class NotificationSession {
                             sharedContainerURL: URL,
                             accountIdentifier: UUID,
                             eventId: String,
-                            isHuge: Bool = false) throws {
+                            hugeConvId: String? = nil) throws {
         
-        let stage = PushNotificationStrategy(withManagedObjectContext: moc, notificationSessionDelegate: delegate, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier, eventId: eventId)
+        let stage = PushNotificationStrategy(withManagedObjectContext: moc, notificationSessionDelegate: delegate, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier, eventId: eventId, hugeConvId: hugeConvId)
         
         let requestGeneratorStore = RequestGeneratorStore(strategies: [stage])
         
@@ -123,6 +123,8 @@ public class NotificationSession {
             transportSession: transportSession,
             moc:moc
         )
+        
+        let isHuge = hugeConvId != nil
         
         try self.init(
             moc: moc,
@@ -141,7 +143,7 @@ public class NotificationSession {
                   sharedContainerURL: URL,
                   accountIdentifier: UUID,
                   isHuge: Bool = false
-        ) throws {
+    ) throws {
         
         self.syncMoc = moc
         self.transportSession = transportSession

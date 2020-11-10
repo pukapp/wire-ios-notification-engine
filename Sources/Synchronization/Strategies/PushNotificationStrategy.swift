@@ -54,14 +54,15 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
                 notificationSessionDelegate: NotificationSessionDelegate?,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID,
-                eventId: String) {
+                eventId: String,
+                hugeConvId: String? = nil) {
         
         self.eventId = eventId
         self.accountIdentifier = accountIdentifier
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
         
-        sync = NotificationSingleSync(moc: managedObjectContext, delegate: self, eventId: eventId)
+        sync = NotificationSingleSync(moc: managedObjectContext, delegate: self, eventId: eventId, hugeConvId: hugeConvId)
         self.eventProcessor = self
         self.delegate = notificationSessionDelegate
         self.moc = managedObjectContext

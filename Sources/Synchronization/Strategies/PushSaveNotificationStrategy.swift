@@ -156,12 +156,11 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         let connectionTranscoder = ZMConnectionTranscoder(managedObjectContext: moc, applicationStatus: nil, syncStatus: nil)
         let userPropertyStrategy = UserPropertyRequestStrategy(withManagedObjectContext: moc, applicationStatus: nil)
         let pushTokenStrategy = PushTokenStrategy(withManagedObjectContext: moc, applicationStatus: nil, analytics: nil)
-        let missEventTranscoder = ZMMissingUpdateEventsTranscoder(managedObjectContext: moc, applicationStatus: nil)
         let userTransCoder = ZMUserTranscoder(managedObjectContext: moc, applicationStatus: nil, syncStatus: nil)
         let userDisableSendMsgStrategy = UserDisableSendMsgStatusStrategy(context: moc, dispatcher: nil)
         let userclientStrategy = UserClientRequestStrategy(clientRegistrationStatus: nil, clientUpdateStatus: nil, context: moc, userKeysStore: nil)
         let clientMessageTranscoder = ClientMessageTranscoder(in: moc, localNotificationDispatcher: nil, applicationStatus: nil)
-        let transcoders = [clientMessageTranscoder, conversationTranscoder, connectionTranscoder, userPropertyStrategy, userclientStrategy, pushTokenStrategy, userTransCoder, userDisableSendMsgStrategy, missEventTranscoder]
+        let transcoders = [clientMessageTranscoder, conversationTranscoder, connectionTranscoder, userPropertyStrategy, userclientStrategy, pushTokenStrategy, userTransCoder, userDisableSendMsgStrategy]
         transcoders.forEach { (ob) in
             if let o = ob as? ZMEventConsumer {
                 o.processEvents([event], liveEvents: true, prefetchResult: nil)
@@ -172,6 +171,10 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         } catch {
             print("save error \(error)")
         }
+        //处理事件后更新id
+        let missEventTranscoder = ZMMissingUpdateEventsTranscoder(managedObjectContext: moc, applicationStatus: nil)
+        missEventTranscoder.processEvents([event], liveEvents: true, prefetchResult: nil)
+        // 释放
         transcoders.forEach { (ob) in
             if let o = ob as? TearDownCapable {
                 o.tearDown()
