@@ -64,9 +64,11 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
         isReadyFetch = false
         DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 20) {
             [weak self] in
-            exLog.info("set isReadyFetch true because process time out")
+            if !(self?.isReadyFetch ?? false) {
+                self?.isReadyFetch = true
+                exLog.info("set isReadyFetch true because process time out")
+            }
             self?.moc?.tearDown()
-            self?.isReadyFetch = true
         }
     }
     
