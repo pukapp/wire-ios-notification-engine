@@ -46,7 +46,7 @@ public class NotificationSession {
     
     public var syncMoc: NSManagedObjectContext!
     
-    public var lastEventId: UUID?
+//    public var lastEventId: UUID?
         
     private let operationLoop: RequestGeneratingOperationLoop
         
@@ -121,7 +121,8 @@ public class NotificationSession {
             callBackQueue: .main,
             requestGeneratorStore: requestGeneratorStore,
             transportSession: transportSession,
-            moc:moc
+            moc:moc,
+            type: .extensionSingleNewRequest
         )
         
         let isHuge = hugeConvId != nil
@@ -149,9 +150,10 @@ public class NotificationSession {
         self.transportSession = transportSession
         self.operationLoop = operationLoop
 //        let accountContainer = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
-        moc.performAndWait { [unowned self] in
-            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
-        }
+        //用来比较eventid 和 lastid 先后顺序
+//        moc.performAndWait { [unowned self] in
+//            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
+//        }
     }
 
     deinit {

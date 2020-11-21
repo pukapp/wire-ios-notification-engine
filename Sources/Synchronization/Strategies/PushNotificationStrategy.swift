@@ -90,7 +90,7 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
 extension PushNotificationStrategy: NotificationSingleSyncDelegate {
     
     public func fetchedEvent(_ event: ZMUpdateEvent) {
-        exLog.info("pushNotificationStrategy fetchedEvent \(event.debugInformation)")
+        exLog.info("pushNotificationStrategy fetchedEvent \(String(describing: event.uuid?.transportString()))")
         eventProcessor.decryptUpdateEventsAndGenerateNotification([event])
     }
     

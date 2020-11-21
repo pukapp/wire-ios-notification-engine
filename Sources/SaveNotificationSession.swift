@@ -100,7 +100,8 @@ public class SaveNotificationSession {
             callBackQueue: .main,
             requestGeneratorStore: requestGeneratorStore,
             transportSession: transportSession,
-            moc:moc
+            moc:moc,
+            type: .extensionStreamNewRequest
         )
         
         try self.init(

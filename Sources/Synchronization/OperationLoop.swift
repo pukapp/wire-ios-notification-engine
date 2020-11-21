@@ -92,6 +92,13 @@ public class RequestGeneratorObserver {
 }
 
 public class OperationLoop : NSObject, RequestAvailableObserver {
+    
+    enum ObserverType {
+        case newRequest
+        case msgNewRequest
+        case extensionStreamNewRequest
+        case extensionSingleNewRequest
+    }
 
     typealias RequestAvailableClosure = () -> Void
     private let callBackQueue: OperationQueue
@@ -99,11 +106,20 @@ public class OperationLoop : NSObject, RequestAvailableObserver {
     var requestAvailableClosure: RequestAvailableClosure?
     private var moc: NSManagedObjectContext
 
-    init(callBackQueue: OperationQueue = .main, moc: NSManagedObjectContext) {
+    init(callBackQueue: OperationQueue = .main, moc: NSManagedObjectContext, type: ObserverType = .newRequest) {
         self.callBackQueue = callBackQueue
         self.moc = moc
         super.init()
-        RequestAvailableNotification.addObserver(self)
+        switch type {
+        case .newRequest:
+            RequestAvailableNotification.addObserver(self)
+        case .msgNewRequest:
+            RequestAvailableNotification.addMsgObserver(self)
+        case .extensionStreamNewRequest:
+            RequestAvailableNotification.addExtensionStreamObserver(self)
+        case .extensionSingleNewRequest:
+            RequestAvailableNotification.addExtensionSingleObserver(self)
+        }
     }
 
     deinit {
@@ -116,6 +132,14 @@ public class OperationLoop : NSObject, RequestAvailableObserver {
     }
     
     public func newMsgRequestsAvailable() {}
+    
+    public func newExtensionStreamRequestsAvailable() {
+        requestAvailableClosure?()
+    }
+    
+    public func newExtensionSingleRequestsAvailable() {
+        requestAvailableClosure?()
+    }
 
 }
 
@@ -130,13 +154,13 @@ public class RequestGeneratingOperationLoop {
     private unowned let transportSession: ZMTransportSession
     
 
-    init(callBackQueue: OperationQueue = .main, requestGeneratorStore: RequestGeneratorStore, transportSession: ZMTransportSession, moc: NSManagedObjectContext) {
+    init(callBackQueue: OperationQueue = .main, requestGeneratorStore: RequestGeneratorStore, transportSession: ZMTransportSession, moc: NSManagedObjectContext, type: OperationLoop.ObserverType = .newRequest) {
         self.moc = moc
         self.callBackQueue = callBackQueue
         self.requestGeneratorStore = requestGeneratorStore
         self.requestGeneratorObserver = RequestGeneratorObserver()
         self.transportSession = transportSession
-        self.operationLoop = OperationLoop(callBackQueue: callBackQueue, moc: moc)
+        self.operationLoop = OperationLoop(callBackQueue: callBackQueue, moc: moc, type: type)
 
         operationLoop.requestAvailableClosure = { [weak self] in self?.enqueueRequests() }
         requestGeneratorObserver.observedGenerator = { [weak self] in self?.requestGeneratorStore.nextRequest() }
