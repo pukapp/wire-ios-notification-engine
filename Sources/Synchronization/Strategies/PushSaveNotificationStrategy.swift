@@ -174,8 +174,8 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
             print("save error \(error)")
         }
         //处理事件后更新id
-        let missEventTranscoder = ZMMissingUpdateEventsTranscoder(managedObjectContext: moc, applicationStatus: nil)
-        missEventTranscoder.processEvents([event], liveEvents: true, prefetchResult: nil)
+        let userDefault = AppGroupInfo.sharedUserDefaults
+        userDefault.set(event.uuid?.transportString(), forKey: lastUpdateEventIDKey + self.accountIdentifier.transportString())
         // 释放
         transcoders.forEach { (ob) in
             if let o = ob as? TearDownCapable {
