@@ -23,6 +23,7 @@ public extension NSManagedObjectContext {
             self.zm_conversationAvatarCache = avatarCache
             self.zm_fileAssetCache = fileCache
             self.setupUserKeyStore(accountDirectory: accountDirectory, applicationContainer: sharedContainerURL)
+            ZMUser.selfUser(in: self)
         }
         
     }

@@ -147,7 +147,9 @@ extension PushNotificationStrategy {
                 conversation = ZMConversation.init(noRowCacheWithRemoteID: conversationID, createIfNeeded: false, in: moc)
                 exLog.info("convertToLocalNotifications conversationID: \(conversationID) after fetch conversation from coredata")
             }
-            guard event.senderUUID() != self.accountIdentifier else {return nil}
+            //可能是系统通知 sendid 为00000000-0000-0000-0000-000000000002
+            
+//            guard event.senderUUID() != self.accountIdentifier else {return nil}
             return ZMLocalNotification(noticationEvent: event, conversation: conversation, managedObjectContext: moc)
         }
     }
