@@ -39,7 +39,8 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
         self.accountIdentifier = accountIdentifier
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
-        streamSync = NotificationStreamSync(moc: managedObjectContext, delegate: self)
+        streamSync = NotificationStreamSync(moc: managedObjectContext, delegate: self, accountid: accountIdentifier)
+        streamSync.fetchNotificationSync.readyForNextRequest()
         self.eventProcessor = self
         self.moc = managedObjectContext
         self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext)
@@ -48,28 +49,11 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
 
     public override func nextRequest() -> ZMTransportRequest? {
         guard isReadyFetch else {return nil}
-        let optionRequest = streamSync.nextRequest()
-        if let request = optionRequest {
-            self.setTimerAfterARequest()
-            return request
-        }
-        return nil
+        return streamSync.nextRequest()
     }
     
     public var requestGenerators: [ZMRequestGenerator] {
         return [self]
-    }
-    
-    private func setTimerAfterARequest() {
-        isReadyFetch = false
-        DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 20) {
-            [weak self] in
-            if !(self?.isReadyFetch ?? false) {
-                self?.isReadyFetch = true
-                exLog.info("set isReadyFetch true because process time out")
-            }
-            self?.moc?.tearDown()
-        }
     }
     
     private var isReadyFetch: Bool = false {
