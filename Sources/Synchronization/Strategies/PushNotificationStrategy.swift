@@ -125,7 +125,6 @@ extension PushNotificationStrategy: UpdateEventProcessor {
                 default: alert.conversationID = conversationID.transportString()
                 }
             }
-            
         }
         // The notification service extension API doesn't support generating multiple user notifications. In this case, the body text will be replaced in the UI project.
         self.delegate?.modifyNotification(alert)

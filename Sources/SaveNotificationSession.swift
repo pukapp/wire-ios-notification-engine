@@ -36,6 +36,12 @@ public class SaveNotificationSession {
     private let sharedContainerURL: URL
     
     private let accountIdentifier: UUID
+    
+    private var strategy: PushSaveNotificationStrategy
+    
+    public var isReadyFetch: Bool {
+        return self.strategy.isReadyFetch
+    }
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -109,7 +115,8 @@ public class SaveNotificationSession {
             transportSession: transportSession,
             operationLoop: operationLoop,
             sharedContainerURL: sharedContainerURL,
-            accountIdentifier: accountIdentifier
+            accountIdentifier: accountIdentifier,
+            stage: stage
         )
         
     }
@@ -118,7 +125,8 @@ public class SaveNotificationSession {
                   transportSession: ZMTransportSession,
                   operationLoop: RequestGeneratingOperationLoop,
                   sharedContainerURL: URL,
-                  accountIdentifier: UUID
+                  accountIdentifier: UUID,
+                  stage: PushSaveNotificationStrategy
         ) throws {
         
         self.syncMoc = moc
@@ -126,6 +134,7 @@ public class SaveNotificationSession {
         self.operationLoop = operationLoop
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
+        self.strategy = stage
         let accountContainer = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
         self.saveNotificationPersistence = ContextDidSaveNotificationPersistence(accountContainer: accountContainer)
         NotificationCenter.default.addObserver(

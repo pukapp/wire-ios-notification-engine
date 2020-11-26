@@ -30,7 +30,6 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
 
     private weak var eventProcessor: UpdateEventProcessor!
     private var moc: NSManagedObjectContext?
-    
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID) {
@@ -44,11 +43,12 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
         self.eventProcessor = self
         self.moc = managedObjectContext
         self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext)
-        isReadyFetch = true
+        self.isReadyFetch = true
     }
 
     public override func nextRequest() -> ZMTransportRequest? {
         guard isReadyFetch else {return nil}
+        self.isReadyFetch = false
         return streamSync.nextRequest()
     }
     
@@ -56,7 +56,7 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
         return [self]
     }
     
-    private var isReadyFetch: Bool = false {
+    public var isReadyFetch: Bool = false {
         didSet {
             if isReadyFetch {
                 self.streamSync.fetchNotificationSync.readyForNextRequest()
@@ -104,39 +104,34 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         moc.setup(sharedContainerURL: self.sharedContainerURL, accountUUID: self.accountIdentifier)
         
         let decryptedUpdateEvents = eventDecrypter.decryptEvents(events)
-        
-        let lock = DispatchSemaphore(value: 1)
-        
-        exLog.info("start process events \(events.count)")
+                
+        exLog.info("start process events, events count is \(events.count)")
         
         for event in decryptedUpdateEvents {
-            exLog.info("current wait event is \(String(describing: event.uuid)) \(event.type.rawValue)")
-            exLog.info("wait lock \(String(describing: event.uuid)) \(event.type.rawValue)")
-            lock.wait()
-            exLog.info("get lock \(String(describing: event.uuid)) \(event.type.rawValue)")
-            exLog.info("current process event is \(String(describing: event.uuid)) \(event.type.rawValue)")
+            
+            exLog.info("current process event is \(String(describing: event.uuid)) eventType: \(event.type.rawValue)")
             
             self.process(event: event, moc: moc)
             
+            exLog.info("finished process event: \(String(describing: event.uuid?.transportString())) eventType: \(event.type.rawValue)")
+            
             moc.tearDown()
+            
+            exLog.info("moc tearDown")
             
             moc.setup(sharedContainerURL: self.sharedContainerURL, accountUUID: self.accountIdentifier)
-            
-            DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 0.3) {
-                lock.signal()
-                exLog.info("release lock \(String(describing: event.uuid)) \(event.type.rawValue)")
-            }
         }
-        exLog.info("already processed all events")
-        DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 1) {
-            moc.tearDown()
+        moc.tearDown()
+        DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 2) {
+            exLog.info("already processed all events, set isReadyFetch true after processed all events")
             self.isReadyFetch = true
-            exLog.info("set isReadyFetch true after processed all events")
         }
     }
     
     
     func process(event: ZMUpdateEvent, moc: NSManagedObjectContext) {
+        
+        exLog.info("begin process event: \(String(describing: event.uuid)) \(event.type.rawValue)")
         
         let conversationTranscoder = ZMConversationTranscoder(managedObjectContext: moc, applicationStatus: nil, localNotificationDispatcher: nil, syncStatus: nil)
         let connectionTranscoder = ZMConnectionTranscoder(managedObjectContext: moc, applicationStatus: nil, syncStatus: nil)
@@ -152,20 +147,34 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
                 o.processEvents([event], liveEvents: true, prefetchResult: nil)
             }
         }
+        
         do {
+            exLog.info("moc.save()")
             try moc.save()
         } catch {
             print("save error \(error)")
         }
+        exLog.info("context save success")
+        
+        exLog.info("prepare update last eventId: \(String(describing: event.uuid?.transportString()))")
+        
         //处理事件后更新id
         let userDefault = AppGroupInfo.sharedUserDefaults
+        
+        exLog.info("begin update last eventid with userdefault: \(userDefault) key: \(lastUpdateEventIDKey) accountIdentifier: \(self.accountIdentifier.transportString())")
+        
         userDefault.set(event.uuid?.transportString(), forKey: lastUpdateEventIDKey + self.accountIdentifier.transportString())
+        
+        exLog.info("update last eventid success")
+        
         // 释放
         transcoders.forEach { (ob) in
             if let o = ob as? TearDownCapable {
                 o.tearDown()
             }
         }
+        
+        exLog.info("free memory eventid: \(String(describing: event.uuid?.transportString()))")
     }
     
 }

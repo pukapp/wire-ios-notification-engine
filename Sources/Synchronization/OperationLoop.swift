@@ -167,6 +167,7 @@ public class RequestGeneratingOperationLoop {
     }
 
     deinit {
+        
         transportSession.tearDown()
         requestGeneratorStore.tearDown()
     }
