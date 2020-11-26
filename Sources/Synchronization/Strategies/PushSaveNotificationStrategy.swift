@@ -122,10 +122,8 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
             moc.setup(sharedContainerURL: self.sharedContainerURL, accountUUID: self.accountIdentifier)
         }
         moc.tearDown()
-        DispatchQueue.global().asyncAfter(deadline: DispatchTime.now() + 2) {
-            exLog.info("already processed all events, set isReadyFetch true after processed all events")
-            self.isReadyFetch = true
-        }
+        exLog.info("already processed all events, set isReadyFetch true after processed all events")
+        self.isReadyFetch = true
     }
     
     
