@@ -53,7 +53,6 @@ public class SaveNotificationSession {
     public convenience init(applicationGroupIdentifier: String,
                             accountIdentifier: UUID,
                             environment: BackendEnvironmentProvider,
-                            delegate: NotificationSessionDelegate?,
                             token: ZMAccessToken?) throws {
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
         let accountDirectory = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
@@ -85,7 +84,6 @@ public class SaveNotificationSession {
             moc: moc,
             transportSession: transportSession,
             accountContainer: StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL),
-            delegate: delegate,
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier)
     }
@@ -93,7 +91,6 @@ public class SaveNotificationSession {
     public convenience init(moc: NSManagedObjectContext,
                             transportSession: ZMTransportSession,
                             accountContainer: URL,
-                            delegate: NotificationSessionDelegate?,
                             sharedContainerURL: URL,
                             accountIdentifier: UUID) throws {
         

@@ -23,11 +23,12 @@ private var exLog = ExLog(tag: "PushSaveNotificationStrategy")
 
 public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGenerator, ZMRequestGeneratorSource {
     
+    public static var lastSaveTime: TimeInterval = Date().timeIntervalSince1970
+    
     var streamSync: NotificationStreamSync!
     public var sharedContainerURL: URL
     public var accountIdentifier: UUID
     public var eventDecrypter: EventDecrypter!
-
     private weak var eventProcessor: UpdateEventProcessor!
     private var moc: NSManagedObjectContext?
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
@@ -47,7 +48,8 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
     }
 
     public override func nextRequest() -> ZMTransportRequest? {
-        guard isReadyFetch else {return nil}
+        let now = Date().timeIntervalSince1970
+        guard isReadyFetch, now - PushSaveNotificationStrategy.lastSaveTime > 5  else {return nil}
         self.isReadyFetch = false
         return streamSync.nextRequest()
     }
@@ -107,13 +109,11 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
                 
         exLog.info("start process events, events count is \(events.count)")
         
-        let userDefault = AppGroupInfo.sharedUserDefaults
-        
         for event in decryptedUpdateEvents {
             
             exLog.info("current process event is \(String(describing: event.uuid)) eventType: \(event.type.rawValue)")
             
-            self.process(event: event, moc: moc, defaults: userDefault)
+            self.process(event: event, moc: moc)
             
             exLog.info("finished process event: \(String(describing: event.uuid?.transportString())) eventType: \(event.type.rawValue)")
             
@@ -123,14 +123,14 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
             
             moc.setup(sharedContainerURL: self.sharedContainerURL, accountUUID: self.accountIdentifier)
         }
-        userDefault.synchronize()
         moc.tearDown()
         exLog.info("already processed all events, set isReadyFetch true after processed all events")
         self.isReadyFetch = true
+        PushSaveNotificationStrategy.lastSaveTime = Date().timeIntervalSince1970
     }
     
     
-    func process(event: ZMUpdateEvent, moc: NSManagedObjectContext, defaults: UserDefaults) {
+    func process(event: ZMUpdateEvent, moc: NSManagedObjectContext) {
         
         exLog.info("begin process event: \(String(describing: event.uuid)) \(event.type.rawValue)")
         
@@ -162,9 +162,13 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         //处理事件后更新id
         
         
+        let defaults = AppGroupInfo.instance.sharedUserDefaults
+        
         exLog.info("begin update last eventid with userdefault: \(defaults) key: \(lastUpdateEventIDKey) accountIdentifier: \(self.accountIdentifier.transportString())")
         
         defaults.set(event.uuid?.transportString(), forKey: lastUpdateEventIDKey + self.accountIdentifier.transportString())
+        
+        defaults.synchronize()
         
         exLog.info("update last eventid success")
         
