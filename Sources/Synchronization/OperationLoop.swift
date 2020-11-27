@@ -23,6 +23,8 @@ import WireRequestStrategy
 
 let contextWasMergedNotification = Notification.Name("zm_contextWasSaved")
 
+private var exLog = ExLog(tag: "OperationLoop")
+
 public class RequestGeneratorStore {
 
     let requestGenerators: [ZMTransportRequestGenerator]
@@ -167,22 +169,16 @@ public class RequestGeneratingOperationLoop {
     }
 
     deinit {
-        
         transportSession.tearDown()
         requestGeneratorStore.tearDown()
     }
     
     fileprivate func enqueueRequests() {
-
-        self.moc.performGroupedBlock {
+        exLog.info("enqueueRequests")
+        self.transportSession.attemptToEnqueueSyncRequest(generator: {
             [weak self] in
-            guard let self = self else {return}
-            var result : ZMTransportEnqueueResult
-            repeat {
-                result = self.transportSession.attemptToEnqueueSyncRequest(generator: { [weak self] in self?.requestGeneratorObserver.nextRequest() })
-            } while result.didGenerateNonNullRequest && result.didHaveLessRequestThanMax
-            
-        }
+            self?.requestGeneratorObserver.nextRequest()
+        })
     }
 }
 

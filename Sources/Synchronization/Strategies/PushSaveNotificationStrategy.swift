@@ -24,6 +24,7 @@ private var exLog = ExLog(tag: "PushSaveNotificationStrategy")
 public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGenerator, ZMRequestGeneratorSource {
     
     public static var lastSaveTime: TimeInterval = Date().timeIntervalSince1970
+    private static var processedEventIds = Set<String>()
     
     var streamSync: NotificationStreamSync!
     public var sharedContainerURL: URL
@@ -76,7 +77,17 @@ extension PushSaveNotificationStrategy: NotificationStreamSyncDelegate {
     
     public func fetchedEvents(_ events: [ZMUpdateEvent]) {
         exLog.info("NotificationStreamSync fetchedEvent \(events.count)")
-        eventProcessor.processUpdateEvents(events)
+        let processEvents = events.filter { (event) -> Bool in
+            guard let eid = event.uuid?.transportString() else {
+                return false
+            }
+            if !PushSaveNotificationStrategy.processedEventIds.contains(eid) {
+                PushSaveNotificationStrategy.processedEventIds.insert(eid)
+                return true
+            }
+            return false
+        }
+        eventProcessor.processUpdateEvents(processEvents)
     }
     
     public func failedFetchingEvents() {

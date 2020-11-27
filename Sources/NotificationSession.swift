@@ -121,7 +121,7 @@ public class NotificationSession {
             callBackQueue: .main,
             requestGeneratorStore: requestGeneratorStore,
             transportSession: transportSession,
-            moc:moc,
+            moc: moc,
             type: .extensionSingleNewRequest
         )
         
@@ -149,11 +149,6 @@ public class NotificationSession {
         self.syncMoc = moc
         self.transportSession = transportSession
         self.operationLoop = operationLoop
-//        let accountContainer = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
-        //用来比较eventid 和 lastid 先后顺序
-//        moc.performAndWait { [unowned self] in
-//            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
-//        }
     }
 
     deinit {
