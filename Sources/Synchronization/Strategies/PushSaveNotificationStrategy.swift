@@ -21,23 +21,26 @@ import WireSyncEngine
 
 private var exLog = ExLog(tag: "PushSaveNotificationStrategy")
 
+public protocol SaveNotificationSessionDelegate: class {
+    func processAllevents()
+}
+
 public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGenerator, ZMRequestGeneratorSource {
-    
-    public static var lastSaveTime: TimeInterval = Date().timeIntervalSince1970
-    private static var processedEventIds = Set<String>()
-    
     var streamSync: NotificationStreamSync!
     public var sharedContainerURL: URL
     public var accountIdentifier: UUID
     public var eventDecrypter: EventDecrypter!
     private weak var eventProcessor: UpdateEventProcessor!
     private var moc: NSManagedObjectContext?
+    private weak var delegate: SaveNotificationSessionDelegate?
     public init(withManagedObjectContext managedObjectContext: NSManagedObjectContext,
                 sharedContainerURL: URL,
-                accountIdentifier: UUID) {
+                accountIdentifier: UUID,
+                delegate: SaveNotificationSessionDelegate) {
         
         self.sharedContainerURL = sharedContainerURL
         self.accountIdentifier = accountIdentifier
+        self.delegate = delegate
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
         streamSync = NotificationStreamSync(moc: managedObjectContext, delegate: self, accountid: accountIdentifier)
@@ -45,26 +48,14 @@ public class PushSaveNotificationStrategy: AbstractRequestStrategy, ZMRequestGen
         self.eventProcessor = self
         self.moc = managedObjectContext
         self.eventDecrypter = EventDecrypter(syncMOC: managedObjectContext)
-        self.isReadyFetch = true
     }
 
     public override func nextRequest() -> ZMTransportRequest? {
-        let now = Date().timeIntervalSince1970
-        guard isReadyFetch, now - PushSaveNotificationStrategy.lastSaveTime > 5  else {return nil}
-        self.isReadyFetch = false
         return streamSync.nextRequest()
     }
     
     public var requestGenerators: [ZMRequestGenerator] {
         return [self]
-    }
-    
-    public var isReadyFetch: Bool = false {
-        didSet {
-            if isReadyFetch {
-                self.streamSync.fetchNotificationSync.readyForNextRequest()
-            }
-        }
     }
     
     deinit {
@@ -77,17 +68,7 @@ extension PushSaveNotificationStrategy: NotificationStreamSyncDelegate {
     
     public func fetchedEvents(_ events: [ZMUpdateEvent]) {
         exLog.info("NotificationStreamSync fetchedEvent \(events.count)")
-        let processEvents = events.filter { (event) -> Bool in
-            guard let eid = event.uuid?.transportString() else {
-                return false
-            }
-            if !PushSaveNotificationStrategy.processedEventIds.contains(eid) {
-                PushSaveNotificationStrategy.processedEventIds.insert(eid)
-                return true
-            }
-            return false
-        }
-        eventProcessor.processUpdateEvents(processEvents)
+        eventProcessor.processUpdateEvents(events)
     }
     
     public func failedFetchingEvents() {
@@ -136,8 +117,7 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         }
         moc.tearDown()
         exLog.info("already processed all events, set isReadyFetch true after processed all events")
-        self.isReadyFetch = true
-        PushSaveNotificationStrategy.lastSaveTime = Date().timeIntervalSince1970
+        self.delegate?.processAllevents()
     }
     
     
@@ -171,7 +151,6 @@ extension PushSaveNotificationStrategy: UpdateEventProcessor {
         exLog.info("prepare update last eventId: \(String(describing: event.uuid?.transportString()))")
         
         //处理事件后更新id
-        
         
         let defaults = AppGroupInfo.instance.sharedUserDefaults
         

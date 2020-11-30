@@ -38,10 +38,6 @@ public class SaveNotificationSession {
     private let accountIdentifier: UUID
     
     private var strategy: PushSaveNotificationStrategy
-    
-    public var isReadyFetch: Bool {
-        return self.strategy.isReadyFetch
-    }
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -53,7 +49,8 @@ public class SaveNotificationSession {
     public convenience init(applicationGroupIdentifier: String,
                             accountIdentifier: UUID,
                             environment: BackendEnvironmentProvider,
-                            token: ZMAccessToken?) throws {
+                            token: ZMAccessToken?,
+                            delegate: SaveNotificationSessionDelegate) throws {
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
         let accountDirectory = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
         let storeFile = accountDirectory.appendingPersistentStoreLocation()
@@ -85,17 +82,19 @@ public class SaveNotificationSession {
             transportSession: transportSession,
             accountContainer: StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL),
             sharedContainerURL: sharedContainerURL,
-            accountIdentifier: accountIdentifier)
+            accountIdentifier: accountIdentifier,
+            delegate: delegate)
     }
     
     public convenience init(moc: NSManagedObjectContext,
                             transportSession: ZMTransportSession,
                             accountContainer: URL,
                             sharedContainerURL: URL,
-                            accountIdentifier: UUID) throws {
+                            accountIdentifier: UUID,
+                            delegate: SaveNotificationSessionDelegate) throws {
         
 
-        let stage = PushSaveNotificationStrategy(withManagedObjectContext: moc, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier)
+        let stage = PushSaveNotificationStrategy(withManagedObjectContext: moc, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier, delegate:delegate)
         
         let requestGeneratorStore = RequestGeneratorStore(strategies: [stage])
         
@@ -152,15 +151,4 @@ extension SaveNotificationSession {
     @objc func contextDidSave(_ note: Notification){
         self.saveNotificationPersistence.add(note)
     }
-}
-
-extension SaveNotificationSession {
-    
-    public func setupWithToken(token: ZMAccessToken?) {
-        self.transportSession.accessToken = token
-        self.syncMoc.performGroupedAndWait{ [unowned self] _  in
-            self.syncMoc.setup(sharedContainerURL: self.sharedContainerURL, accountUUID: self.accountIdentifier)
-        }
-    }
-    
 }
