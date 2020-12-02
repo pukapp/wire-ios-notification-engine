@@ -174,11 +174,12 @@ public class RequestGeneratingOperationLoop {
     }
     
     fileprivate func enqueueRequests() {
-        exLog.info("enqueueRequests")
-        self.transportSession.attemptToEnqueueSyncRequest(generator: {
-            [weak self] in
-            self?.requestGeneratorObserver.nextRequest()
-        })
+        var result : ZMTransportEnqueueResult
+        
+        repeat {
+            result = transportSession.attemptToEnqueueSyncRequest(generator: { [weak self] in self?.requestGeneratorObserver.nextRequest() })
+        } while result.didGenerateNonNullRequest && result.didHaveLessRequestThanMax
+        
     }
 }
 

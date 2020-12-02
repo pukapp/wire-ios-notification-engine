@@ -46,7 +46,7 @@ public class NotificationSession {
     
     public var syncMoc: NSManagedObjectContext!
     
-//    public var lastEventId: UUID?
+    public var lastEventId: UUID?
         
     private let operationLoop: RequestGeneratingOperationLoop
         
@@ -145,10 +145,12 @@ public class NotificationSession {
                   accountIdentifier: UUID,
                   isHuge: Bool = false
     ) throws {
-        
         self.syncMoc = moc
         self.transportSession = transportSession
         self.operationLoop = operationLoop
+        moc.performAndWait { [unowned self] in
+            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
+        }
     }
 
     deinit {
