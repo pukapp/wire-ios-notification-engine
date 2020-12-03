@@ -54,14 +54,15 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
                 notificationSessionDelegate: NotificationSessionDelegate?,
                 sharedContainerURL: URL,
                 accountIdentifier: UUID,
-                eventId: String) {
+                eventId: String,
+                hugeConvId: String? = nil) {
         
         self.eventId = eventId
         self.accountIdentifier = accountIdentifier
         super.init(withManagedObjectContext: managedObjectContext,
                    applicationStatus: nil)
         
-        sync = NotificationSingleSync(moc: managedObjectContext, delegate: self, eventId: eventId)
+        sync = NotificationSingleSync(moc: managedObjectContext, delegate: self, eventId: eventId, hugeConvId: hugeConvId)
         self.eventProcessor = self
         self.delegate = notificationSessionDelegate
         self.moc = managedObjectContext
@@ -89,8 +90,8 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
 extension PushNotificationStrategy: NotificationSingleSyncDelegate {
     
     public func fetchedEvent(_ event: ZMUpdateEvent) {
-        exLog.info("pushNotificationStrategy fetchedEvent \(event.debugInformation)")
-        eventProcessor.decryptUpdateEvents([event], ignoreBuffer: true)
+        exLog.info("pushNotificationStrategy fetchedEvent \(String(describing: event.uuid?.transportString()))")
+        eventProcessor.decryptUpdateEventsAndGenerateNotification([event])
     }
     
     public func failedFetchingEvents() {
@@ -100,16 +101,14 @@ extension PushNotificationStrategy: NotificationSingleSyncDelegate {
 
 extension PushNotificationStrategy: UpdateEventProcessor {
     
-    @objc(processUpdateEvents:ignoreBuffer:)
-    public func processUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
+    public func processUpdateEvents(_ updateEvents: [ZMUpdateEvent]) {
         
     }
     
-    @objc(decryptUpdateEvents:ignoreBuffer:)
-    public func decryptUpdateEvents(_ updateEvents: [ZMUpdateEvent], ignoreBuffer: Bool) {
-        exLog.info("ready for decrypt event \(String(describing: updateEvents.first.debugDescription))")
+    public func decryptUpdateEventsAndGenerateNotification(_ updateEvents: [ZMUpdateEvent]) {
+        exLog.info("ready for decrypt event \(String(describing: updateEvents.first?.uuid?.transportString()))")
         let decryptedUpdateEvents = eventDecrypter.decryptEvents(updateEvents)
-        exLog.info("already decrypt event \(String(describing: decryptedUpdateEvents.first?.debugDescription))")
+        exLog.info("already decrypt event \(String(describing: decryptedUpdateEvents.first?.uuid?.transportString()))")
         let localNotifications = self.convertToLocalNotifications(decryptedUpdateEvents, moc: self.moc)
         exLog.info("convertToLocalNotifications \(String(describing: localNotifications.first.debugDescription))")
         var alert = ClientNotification(title: "", body: "", categoryIdentifier: "")
@@ -126,7 +125,6 @@ extension PushNotificationStrategy: UpdateEventProcessor {
                 default: alert.conversationID = conversationID.transportString()
                 }
             }
-            
         }
         // The notification service extension API doesn't support generating multiple user notifications. In this case, the body text will be replaced in the UI project.
         self.delegate?.modifyNotification(alert)
@@ -144,10 +142,13 @@ extension PushNotificationStrategy {
         return events.compactMap { event in
             var conversation: ZMConversation?
             if let conversationID = event.conversationUUID() {
-                exLog.info("convertToLocalNotifications conversationID: \(conversationID)")
+                exLog.info("convertToLocalNotifications conversationID: \(conversationID) before fetch conversation from coredata")
                 conversation = ZMConversation.init(noRowCacheWithRemoteID: conversationID, createIfNeeded: false, in: moc)
+                exLog.info("convertToLocalNotifications conversationID: \(conversationID) after fetch conversation from coredata")
             }
-            guard event.senderUUID() != self.accountIdentifier else {return nil}
+            //可能是系统通知 sendid 为00000000-0000-0000-0000-000000000002
+            
+//            guard event.senderUUID() != self.accountIdentifier else {return nil}
             return ZMLocalNotification(noticationEvent: event, conversation: conversation, managedObjectContext: moc)
         }
     }

@@ -23,32 +23,21 @@ import WireTransport
 import WireRequestStrategy
 import WireLinkPreview
 
-
-extension BackendEnvironmentProvider {
-    func cookieStorage(for account: Account) -> ZMPersistentCookieStorage {
-        let backendURL = self.backendURL.host!
-        return ZMPersistentCookieStorage(forServerName: backendURL, userIdentifier: account.userIdentifier)
-    }
-    
-    public func isAuthenticated(_ account: Account) -> Bool {
-        return cookieStorage(for: account).authenticationCookieData != nil
-    }
-}
-
-/// A syncing layer for the notification processing
-/// - note: this is the entry point of this framework. Users of
-/// the framework should create an instance as soon as possible in
-/// the lifetime of the notification extension, and hold on to that session
-/// for the entire lifetime.
-public class NotificationSession {
+public class SaveNotificationSession {
     
     public let transportSession: ZMTransportSession
     
-    public var syncMoc: NSManagedObjectContext!
-    
-    public var lastEventId: UUID?
+    private var syncMoc: NSManagedObjectContext!
         
     private let operationLoop: RequestGeneratingOperationLoop
+    
+    private let saveNotificationPersistence: ContextDidSaveNotificationPersistence
+    
+    private let sharedContainerURL: URL
+    
+    private let accountIdentifier: UUID
+    
+    private var strategy: PushSaveNotificationStrategy
         
     /// Initializes a new `SessionDirectory` to be used in an extension environment
     /// - parameter databaseDirectory: The `NSURL` of the shared group container
@@ -60,15 +49,10 @@ public class NotificationSession {
     public convenience init(applicationGroupIdentifier: String,
                             accountIdentifier: UUID,
                             environment: BackendEnvironmentProvider,
-                            delegate: NotificationSessionDelegate?,
                             token: ZMAccessToken?,
-                            eventId: String,
-                            hugeConvId: String? = nil) throws {
-       
+                            delegate: SaveNotificationSessionDelegate) throws {
         let sharedContainerURL = FileManager.sharedContainerDirectory(for: applicationGroupIdentifier)
-        
         let accountDirectory = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
-        
         let storeFile = accountDirectory.appendingPersistentStoreLocation()
         let model = NSManagedObjectModel.loadModel()
         let psc = NSPersistentStoreCoordinator(managedObjectModel: model)
@@ -77,8 +61,8 @@ public class NotificationSession {
         let moc = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         moc.performAndWait {
             moc.persistentStoreCoordinator = psc
-            ZMUser.selfUser(in: moc)
-            moc.setupUserKeyStore(accountDirectory: accountDirectory, applicationContainer: sharedContainerURL)
+            moc.setup(sharedContainerURL: sharedContainerURL, accountUUID: accountIdentifier)
+            moc.stalenessInterval = -1
         }
         let cookieStorage = ZMPersistentCookieStorage(forServerName: environment.backendURL.host!, userIdentifier: accountIdentifier)
         let reachabilityGroup = ZMSDispatchGroup(dispatchGroup: DispatchGroup(), label: "Sharing session reachability")!
@@ -97,23 +81,20 @@ public class NotificationSession {
             moc: moc,
             transportSession: transportSession,
             accountContainer: StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL),
-            delegate: delegate,
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier,
-            eventId: eventId,
-            hugeConvId: hugeConvId)
+            delegate: delegate)
     }
     
     public convenience init(moc: NSManagedObjectContext,
                             transportSession: ZMTransportSession,
                             accountContainer: URL,
-                            delegate: NotificationSessionDelegate?,
                             sharedContainerURL: URL,
                             accountIdentifier: UUID,
-                            eventId: String,
-                            hugeConvId: String? = nil) throws {
+                            delegate: SaveNotificationSessionDelegate) throws {
         
-        let stage = PushNotificationStrategy(withManagedObjectContext: moc, notificationSessionDelegate: delegate, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier, eventId: eventId, hugeConvId: hugeConvId)
+
+        let stage = PushSaveNotificationStrategy(withManagedObjectContext: moc, sharedContainerURL: sharedContainerURL, accountIdentifier: accountIdentifier, delegate:delegate)
         
         let requestGeneratorStore = RequestGeneratorStore(strategies: [stage])
         
@@ -121,11 +102,9 @@ public class NotificationSession {
             callBackQueue: .main,
             requestGeneratorStore: requestGeneratorStore,
             transportSession: transportSession,
-            moc: moc,
-            type: .extensionSingleNewRequest
+            moc:moc,
+            type: .extensionStreamNewRequest
         )
-        
-        let isHuge = hugeConvId != nil
         
         try self.init(
             moc: moc,
@@ -133,7 +112,7 @@ public class NotificationSession {
             operationLoop: operationLoop,
             sharedContainerURL: sharedContainerURL,
             accountIdentifier: accountIdentifier,
-            isHuge: isHuge
+            stage: stage
         )
         
     }
@@ -143,19 +122,33 @@ public class NotificationSession {
                   operationLoop: RequestGeneratingOperationLoop,
                   sharedContainerURL: URL,
                   accountIdentifier: UUID,
-                  isHuge: Bool = false
-    ) throws {
+                  stage: PushSaveNotificationStrategy
+        ) throws {
+        
         self.syncMoc = moc
         self.transportSession = transportSession
         self.operationLoop = operationLoop
-        moc.performAndWait { [unowned self] in
-            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
-        }
+        self.sharedContainerURL = sharedContainerURL
+        self.accountIdentifier = accountIdentifier
+        self.strategy = stage
+        let accountContainer = StorageStack.accountFolder(accountIdentifier: accountIdentifier, applicationContainer: sharedContainerURL)
+        self.saveNotificationPersistence = ContextDidSaveNotificationPersistence(accountContainer: accountContainer)
+        NotificationCenter.default.addObserver(
+        self,
+        selector: #selector(SaveNotificationSession.contextDidSave(_:)),
+        name:.NSManagedObjectContextDidSave,
+        object: moc)
     }
 
     deinit {
         print("NotificationSession deinit")
         transportSession.reachability.tearDown()
         transportSession.tearDown()
+    }
+}
+
+extension SaveNotificationSession {
+    @objc func contextDidSave(_ note: Notification){
+        self.saveNotificationPersistence.add(note)
     }
 }
