@@ -79,8 +79,7 @@ public class NotificationSession {
         let moc = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         moc.performAndWait {
             moc.persistentStoreCoordinator = psc
-            ZMUser.selfUser(in: moc)
-            moc.setupUserKeyStore(accountDirectory: accountDirectory, applicationContainer: sharedContainerURL)
+            moc.setup(sharedContainerURL: sharedContainerURL, accountUUID: accountIdentifier)
         }
         let cookieStorage = ZMPersistentCookieStorage(forServerName: environment.backendURL.host!, userIdentifier: accountIdentifier)
         let reachabilityGroup = ZMSDispatchGroup(dispatchGroup: DispatchGroup(), label: "Sharing session reachability")!
