@@ -33,7 +33,7 @@ public struct ClientNotification {
     public var conversationID: String?
     
     public var isInValided: Bool {
-        return title.count == 0 && body.count == 0 && categoryIdentifier.count == 0
+        return title.isEmpty && body.isEmpty
     }
 }
 
