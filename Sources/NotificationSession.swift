@@ -157,7 +157,7 @@ public class NotificationSession {
         }
         NotificationCenter.default.addObserver(
         self,
-        selector: #selector(SaveNotificationSession.contextDidSave(_:)),
+        selector: #selector(NotificationSession.contextDidSave(_:)),
         name:.NSManagedObjectContextDidSave,
         object: moc)
     }
