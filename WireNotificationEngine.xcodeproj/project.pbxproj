@@ -721,7 +721,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 06BD1D2F2487B01C002F82A6 /* wire-ios-notification-engine.xcconfig */;
 			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
+				APPLICATION_EXTENSION_API_ONLY = NO;
+				"ARCHS[sdk=iphoneos*]" = arm64;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -748,6 +749,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.wire.wire-ios-notification-engine";
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -760,7 +762,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 06BD1D2F2487B01C002F82A6 /* wire-ios-notification-engine.xcconfig */;
 			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
+				APPLICATION_EXTENSION_API_ONLY = NO;
+				"ARCHS[sdk=iphoneos*]" = arm64;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -787,6 +790,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.wire.wire-ios-notification-engine";
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
 				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
