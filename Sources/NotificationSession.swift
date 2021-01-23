@@ -46,8 +46,6 @@ public class NotificationSession {
     
     public var syncMoc: NSManagedObjectContext!
     
-    public var lastEventId: UUID?
-        
     private let operationLoop: RequestGeneratingOperationLoop
     
     private var saveNotificationPersistence: ContextDidSaveNotificationPersistence
@@ -152,9 +150,6 @@ public class NotificationSession {
         self.transportSession = transportSession
         self.operationLoop = operationLoop
         self.saveNotificationPersistence = ContextDidSaveNotificationPersistence(accountContainer: accountContainer)
-        moc.performAndWait { [unowned self] in
-            self.lastEventId = isHuge ? moc.zm_lastHugeNotificationID : moc.zm_lastNotificationID
-        }
         NotificationCenter.default.addObserver(
         self,
         selector: #selector(NotificationSession.contextDidSave(_:)),

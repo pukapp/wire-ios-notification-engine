@@ -108,20 +108,11 @@ public class OperationLoop : NSObject, RequestAvailableObserver {
     var requestAvailableClosure: RequestAvailableClosure?
     private var moc: NSManagedObjectContext
 
-    init(callBackQueue: OperationQueue = .main, moc: NSManagedObjectContext, type: ObserverType = .newRequest) {
+    init(callBackQueue: OperationQueue = .main, moc: NSManagedObjectContext) {
         self.callBackQueue = callBackQueue
         self.moc = moc
         super.init()
-        switch type {
-        case .newRequest:
-            RequestAvailableNotification.addObserver(self)
-        case .msgNewRequest:
-            RequestAvailableNotification.addMsgObserver(self)
-        case .extensionStreamNewRequest:
-            RequestAvailableNotification.addExtensionStreamObserver(self)
-        case .extensionSingleNewRequest:
-            RequestAvailableNotification.addExtensionSingleObserver(self)
-        }
+        RequestAvailableNotification.addObserver(self)
     }
 
     deinit {
@@ -162,7 +153,7 @@ public class RequestGeneratingOperationLoop {
         self.requestGeneratorStore = requestGeneratorStore
         self.requestGeneratorObserver = RequestGeneratorObserver()
         self.transportSession = transportSession
-        self.operationLoop = OperationLoop(callBackQueue: callBackQueue, moc: moc, type: type)
+        self.operationLoop = OperationLoop(callBackQueue: callBackQueue, moc: moc)
 
         operationLoop.requestAvailableClosure = { [weak self] in self?.enqueueRequests() }
         requestGeneratorObserver.observedGenerator = { [weak self] in self?.requestGeneratorStore.nextRequest() }
