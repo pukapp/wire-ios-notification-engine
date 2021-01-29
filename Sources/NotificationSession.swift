@@ -35,6 +35,7 @@ extension BackendEnvironmentProvider {
     }
 }
 
+private var exLog = ExLog(tag: "NotificationSession")
 /// A syncing layer for the notification processing
 /// - note: this is the entry point of this framework. Users of
 /// the framework should create an instance as soon as possible in
@@ -163,7 +164,7 @@ public class NotificationSession {
     }
 
     deinit {
-        print("NotificationSession deinit")
+        exLog.info("NotificationSession deinit")
         transportSession.reachability.tearDown()
         transportSession.tearDown()
     }

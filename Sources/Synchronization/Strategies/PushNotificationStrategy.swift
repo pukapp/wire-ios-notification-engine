@@ -82,7 +82,7 @@ public final class PushNotificationStrategy: AbstractRequestStrategy, ZMRequestG
     }
     
     deinit {
-        print("PushNotificationStrategy deinit")
+        exLog.info("PushNotificationStrategy deinit")
     }
     
 }
